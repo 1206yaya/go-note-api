@@ -22,16 +22,17 @@ import (
 var echoLambda *echoadapter.EchoLambda
 
 func initializeApp() (*echo.Echo, error) {
-	err := godotenv.Load()
-	if err != nil {
-		log.Printf("Error loading .env file: %v", err)
+	// ローカル環境の場合のみ.envを読み込む
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") == "" {
+		err := godotenv.Load()
+		if err != nil {
+			log.Printf("Error loading .env file: %v", err)
+		}
 	}
 
 	log.Println("Environment variables:")
 	log.Printf("DYNAMODB_TABLE: %s", os.Getenv("DYNAMODB_TABLE"))
 	log.Printf("AWS_REGION: %s", os.Getenv("AWS_REGION"))
-	log.Printf("AWS_ACCESS_KEY_ID: %s", os.Getenv("AWS_ACCESS_KEY_ID"))
-	log.Printf("AWS_SECRET_ACCESS_KEY: %s", os.Getenv("AWS_SECRET_ACCESS_KEY"))
 	log.Printf("DYNAMODB_ENDPOINT: %s", os.Getenv("DYNAMODB_ENDPOINT"))
 
 	// Initialize DynamoDB client
@@ -86,7 +87,9 @@ func initializeApp() (*echo.Echo, error) {
 }
 
 func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	// アプリケーションの初期化がまだ行われていない場合のみ実行
 	if echoLambda == nil {
+		// echoLambdaが初期化されていなければ初期化する
 		e, err := initializeApp()
 		if err != nil {
 			log.Printf("Failed to initialize app: %v", err)
@@ -97,6 +100,7 @@ func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.API
 		}
 		echoLambda = echoadapter.New(e)
 	}
+	// 初期化済みのechoLambdaでリクエストを処理
 	return echoLambda.ProxyWithContext(ctx, req)
 }
 

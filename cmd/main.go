@@ -2,51 +2,54 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"os"
-
-	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
-	"github.com/joho/godotenv"
-	"github.com/labstack/echo/v4"
-	"github.com/labstack/echo/v4/middleware"
 
 	"github.com/1206yaya/go-note-api/internal/handlers"
 	"github.com/1206yaya/go-note-api/internal/repositories"
 	"github.com/1206yaya/go-note-api/internal/services"
 	"github.com/1206yaya/go-note-api/pkg/db"
+	"github.com/aws/aws-lambda-go/events"
+	"github.com/aws/aws-lambda-go/lambda"
+	"github.com/aws/aws-sdk-go-v2/service/dynamodb"
+	echoadapter "github.com/awslabs/aws-lambda-go-api-proxy/echo"
+	"github.com/joho/godotenv"
+	"github.com/labstack/echo/v4"
+	"github.com/labstack/echo/v4/middleware"
 )
 
-func init() {
+var echoLambda *echoadapter.EchoLambda
+
+func initializeApp() (*echo.Echo, error) {
 	err := godotenv.Load()
 	if err != nil {
 		log.Printf("Error loading .env file: %v", err)
 	}
+
 	log.Println("Environment variables:")
 	log.Printf("DYNAMODB_TABLE: %s", os.Getenv("DYNAMODB_TABLE"))
 	log.Printf("AWS_REGION: %s", os.Getenv("AWS_REGION"))
 	log.Printf("AWS_ACCESS_KEY_ID: %s", os.Getenv("AWS_ACCESS_KEY_ID"))
 	log.Printf("AWS_SECRET_ACCESS_KEY: %s", os.Getenv("AWS_SECRET_ACCESS_KEY"))
 	log.Printf("DYNAMODB_ENDPOINT: %s", os.Getenv("DYNAMODB_ENDPOINT"))
-}
-
-func main() {
 
 	// Initialize DynamoDB client
 	dynamoDBClient, err := db.NewDynamoDBClient()
 	if err != nil {
-		log.Fatalf("Failed to initialize DynamoDB client: %v", err)
+		return nil, fmt.Errorf("failed to initialize DynamoDB client: %v", err)
 	}
+
 	// 接続テスト
 	_, err = dynamoDBClient.ListTables(context.Background(), &dynamodb.ListTablesInput{})
 	if err != nil {
-		log.Fatalf("Failed to connect to DynamoDB: %v", err)
+		return nil, fmt.Errorf("failed to connect to DynamoDB: %v", err)
 	}
-
 	log.Println("Successfully connected to DynamoDB")
 
 	err = db.EnsureTableExists(dynamoDBClient, os.Getenv("DYNAMODB_TABLE"))
 	if err != nil {
-		log.Fatalf("Failed to ensure table exists: %v", err)
+		return nil, fmt.Errorf("failed to ensure table exists: %v", err)
 	}
 
 	// Initialize repository
@@ -61,13 +64,13 @@ func main() {
 	// Initialize Echo
 	e := echo.New()
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		// FE_URL: Frontendの本番環境のドメイン
 		AllowOrigins: []string{"http://localhost:3000"},
 		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept,
 			echo.HeaderAccessControlAllowHeaders, echo.HeaderXCSRFToken},
 		AllowMethods:     []string{"GET", "PUT", "POST", "DELETE"},
 		AllowCredentials: true,
 	}))
+
 	// Middleware
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
@@ -79,6 +82,34 @@ func main() {
 	e.DELETE("/notes/:id", noteHandler.DeleteNote)
 	e.GET("/notes", noteHandler.ListNotes)
 
-	// Start server
-	e.Logger.Fatal(e.Start(":8080"))
+	return e, nil
+}
+
+func Handler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	if echoLambda == nil {
+		e, err := initializeApp()
+		if err != nil {
+			log.Printf("Failed to initialize app: %v", err)
+			return events.APIGatewayProxyResponse{
+				StatusCode: 500,
+				Body:       "Internal Server Error",
+			}, nil
+		}
+		echoLambda = echoadapter.New(e)
+	}
+	return echoLambda.ProxyWithContext(ctx, req)
+}
+
+func main() {
+	if os.Getenv("AWS_LAMBDA_FUNCTION_NAME") != "" {
+		// Running in Lambda
+		lambda.Start(Handler)
+	} else {
+		// Running locally
+		e, err := initializeApp()
+		if err != nil {
+			log.Fatalf("Failed to initialize app: %v", err)
+		}
+		e.Logger.Fatal(e.Start(":8080"))
+	}
 }

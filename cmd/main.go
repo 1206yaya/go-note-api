@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/1206yaya/go-note-api/internal/handlers"
 	"github.com/1206yaya/go-note-api/internal/repositories"
@@ -20,6 +21,15 @@ import (
 )
 
 var echoLambda *echoadapter.EchoLambda
+
+func corsMiddleware() echo.MiddlewareFunc {
+	return middleware.CORSWithConfig(middleware.CORSConfig{
+		AllowOrigins:     strings.Split(os.Getenv("ALLOWED_ORIGINS"), ","),
+		AllowHeaders:     []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept, echo.HeaderAccessControlAllowHeaders, echo.HeaderXCSRFToken},
+		AllowMethods:     []string{echo.GET, echo.PUT, echo.POST, echo.DELETE},
+		AllowCredentials: true,
+	})
+}
 
 func initializeApp() (*echo.Echo, error) {
 	// ローカル環境の場合のみ.envを読み込む
@@ -53,26 +63,16 @@ func initializeApp() (*echo.Echo, error) {
 		return nil, fmt.Errorf("failed to ensure table exists: %v", err)
 	}
 
-	// Initialize repository
 	noteRepo := repositories.NewDynamoDBNoteRepository(dynamoDBClient, os.Getenv("DYNAMODB_TABLE"))
 
-	// Initialize service
 	noteService := services.NewNoteService(noteRepo)
 
-	// Initialize handler
 	noteHandler := handlers.NewNoteHandler(noteService)
 
-	// Initialize Echo
 	e := echo.New()
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins: []string{"http://localhost:3000"},
-		AllowHeaders: []string{echo.HeaderOrigin, echo.HeaderContentType, echo.HeaderAccept,
-			echo.HeaderAccessControlAllowHeaders, echo.HeaderXCSRFToken},
-		AllowMethods:     []string{"GET", "PUT", "POST", "DELETE"},
-		AllowCredentials: true,
-	}))
 
-	// Middleware
+	e.Use(corsMiddleware())
+
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 

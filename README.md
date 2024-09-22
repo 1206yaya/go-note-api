@@ -47,10 +47,12 @@ This API provides a serverless solution for note management, leveraging AWS serv
    ```
    go mod download
    ```
-3. Set environment variables:
-   - `DYNAMODB_TABLE`: The name of your DynamoDB table
-   - `AWS_REGION`: Your AWS region (e.g., "ap-northeast-1")
-   - `DYNAMODB_ENDPOINT` (optional): For local development, set to "http://localhost:8000"
+3. Set up environment variables:
+   - Copy the `.env.example` file to `.env`:
+     ```
+     cp .env.example .env
+     ```
+   - Edit the `.env` file and set the required environment variables
 
 ## Running the API
 

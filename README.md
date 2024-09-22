@@ -1,6 +1,6 @@
 # Go Note API
 
-This is a RESTful API for managing notes, built with Go, Echo, and DynamoDB. It is designed to be deployed to AWS Lambda and API Gateway using the tf-note-infra Terraform configuration.
+This is a RESTful API for managing notes, built with Go, Echo, and DynamoDB. It is the backend component of the Note App infrastructure. It's designed to work in conjunction with the [react-note-web](https://github.com/1206yaya/react-note-web) frontend and is deployed using the [tf-note-infra](https://github.com/1206yaya/tf-note-infra) Terraform configuration.
 
 ## Overview
 
